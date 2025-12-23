@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>Cell Wars</title>
+    <style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    overflow: hidden;
+    background: #0a0a0a;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+#gameContainer {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    overflow: hidden;
+}
+
+#gameCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at center, #1a1a2e 0%, #0a0a0a 100%);
+}
+
+#hud {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    pointer-events: none;
+    z-index: 10;
+}
+
+#massDisplay {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    padding: 12px 24px;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 18px;
+    font-weight: 600;
+    display: inline-block;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#massValue {
+    color: #00d4ff;
+    font-size: 24px;
+}
+
+#instructions {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    padding: 12px 24px;
+    border-radius: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#startScreen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+#startScreen.hidden {
+    display: none;
+}
+
+#startScreen h1 {
+    color: #00d4ff;
+    font-size: 64px;
+    margin-bottom: 40px;
+    text-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
+}
+
+#startButton {
+    background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%);
+    border: none;
+    padding: 20px 60px;
+    font-size: 24px;
+    font-weight: 600;
+    color: #fff;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 8px 30px rgba(0, 212, 255, 0.4);
+}
+
+#startButton:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0, 212, 255, 0.6);
+}
+
+#startButton:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+    #startScreen h1 {
+        font-size: 48px;
+    }
+    
+    #startButton {
+        padding: 16px 48px;
+        font-size: 20px;
+    }
+    
+    #massDisplay {
+        font-size: 16px;
+        padding: 10px 20px;
+    }
+    
+    #massValue {
+        font-size: 20px;
+    }
+    
+    #instructions {
+        font-size: 12px;
+        padding: 8px 16px;
+    }
+}
+
+@media (max-height: 600px) {
+    #hud {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+    }
+}
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="hud">
+            <div id="massDisplay">Masa: <span id="massValue">10</span></div>
+            <div id="instructions">Usa el ratón o toca la pantalla para moverte</div>
+        </div>
+        <div id="startScreen">
+            <h1>Cell Wars</h1>
+            <button id="startButton">Comenzar</button>
+        </div>
+    </div>
+    <script>
+class Vector2 {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+    }
+    
+    add(v) {
+        return new Vector2(this.x + v.x, this.y + v.y);
+    }
+    
+    subtract(v) {
+        return new Vector2(this.x - v.x, this.y - v.y);
+    }
+    
+    multiply(scalar) {
+        return new Vector2(this.x * scalar, this.y * scalar);
+    }
+    
+    magnitude() {
+        return Math.sqrt(this.x * this.x + this.y * this.y);
+    }
+    
+    normalize() {
+        const mag = this.magnitude();
+        return mag > 0 ? new Vector2(this.x / mag, this.y / mag) : new Vector2(0, 0);
+    }
+    
+    distance(v) {
+        return Math.sqrt((this.x - v.x) ** 2 + (this.y - v.y) ** 2);
+    }
+}
+
+class Cell {
+    constructor(x, y, mass, color, isPlayer = false) {
+        this.position = new Vector2(x, y);
+        this.velocity = new Vector2(0, 0);
+        this.mass = mass;
+        this.radius = this.calculateRadius();
+        this.color = color;
+        this.isPlayer = isPlayer;
+        this.targetPosition = null;
+        this.behavior = 'roaming';
+        this.roamingTarget = null;
+    }
+    
+    calculateRadius() {
+        return Math.sqrt(this.mass / Math.PI);
+    }
+    
+    getMass() {
+        return this.mass;
+    }
+    
+    setMass(newMass) {
+        this.mass = newMass;
+        this.radius = this.calculateRadius();
+    }
+    
+    addMass(additionalMass) {
+        this.setMass(this.mass + additionalMass);
+    }
+    
+    getSpeed() {
+        const baseSpeed = 300;
+        return baseSpeed / Math.sqrt(this.mass);
+    }
+    
+    update(deltaTime, worldWidth, worldHeight) {
+        if (this.targetPosition) {
+            const direction = this.targetPosition.subtract(this.position).normalize();
+            const speed = this.getSpeed();
+            const targetVelocity = direction.multiply(speed);
+            
+            const smoothing = 0.15;
+            this.velocity = new Vector2(
+                this.velocity.x + (targetVelocity.x - this.velocity.x) * smoothing,
+                this.velocity.y + (targetVelocity.y - this.velocity.y) * smoothing
+            );
+        } else {
+            this.velocity = this.velocity.multiply(0.95);
+        }
+        
+        this.position = this.position.add(this.velocity.multiply(deltaTime));
+        
+        if (this.position.x - this.radius < 0) {
+            this.position.x = this.radius;
+            this.velocity.x = 0;
+        }
+        if (this.position.x + this.radius > worldWidth) {
+            this.position.x = worldWidth - this.radius;
+            this.velocity.x = 0;
+        }
+        if (this.position.y - this.radius < 0) {
+            this.position.y = this.radius;
+            this.velocity.y = 0;
+        }
+        if (this.position.y + this.radius > worldHeight) {
+            this.position.y = worldHeight - this.radius;
+            this.velocity.y = 0;
+        }
+    }
+    
+    draw(ctx, camera) {
+        const screenPos = camera.worldToScreen(this.position);
+        const screenRadius = this.radius * camera.zoom;
+        
+        if (screenRadius < 1) return;
+        
+        ctx.save();
+        
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = screenRadius * 0.3;
+        
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, screenRadius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = Math.max(2, screenRadius * 0.05);
+        ctx.stroke();
+        
+        const gradient = ctx.createRadialGradient(
+            screenPos.x - screenRadius * 0.3,
+            screenPos.y - screenRadius * 0.3,
+            0,
+            screenPos.x,
+            screenPos.y,
+            screenRadius
+        );
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, screenRadius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+    }
+}
+
+class Pellet {
+    constructor(x, y, mass) {
+        this.position = new Vector2(x, y);
+        this.mass = mass;
+        this.radius = this.calculateRadius();
+        this.color = this.randomColor();
+    }
+    
+    calculateRadius() {
+        return Math.sqrt(this.mass / Math.PI);
+    }
+    
+    randomColor() {
+        const hue = Math.random() * 360;
+        return `hsl(${hue}, 70%, 60%)`;
+    }
+    
+    draw(ctx, camera) {
+        const screenPos = camera.worldToScreen(this.position);
+        const screenRadius = this.radius * camera.zoom;
+        
+        if (screenRadius < 0.5) return;
+        
+        ctx.save();
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = screenRadius * 0.5;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, screenRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class AICell extends Cell {
+    constructor(x, y, mass, color) {
+        super(x, y, mass, color, false);
+        this.behavior = 'roaming';
+        this.roamingTarget = null;
+        this.thinkTimer = 0;
+        this.thinkInterval = 0.5;
+    }
+    
+    updateAI(deltaTime, cells, pellets) {
+        this.thinkTimer += deltaTime;
+        
+        if (this.thinkTimer >= this.thinkInterval) {
+            this.thinkTimer = 0;
+            this.think(cells, pellets);
+        }
+        
+        if (this.behavior === 'roaming' && this.roamingTarget) {
+            this.targetPosition = this.roamingTarget;
+            
+            if (this.position.distance(this.roamingTarget) < 50) {
+                this.roamingTarget = null;
+            }
+        }
+    }
+    
+    think(cells, pellets) {
+        let nearestThreat = null;
+        let nearestThreatDistance = Infinity;
+        let nearestPrey = null;
+        let nearestPreyDistance = Infinity;
+        
+        const detectionRange = 400;
+        
+        for (let cell of cells) {
+            if (cell === this) continue;
+            
+            const distance = this.position.distance(cell.position);
+            
+            if (distance < detectionRange) {
+                if (cell.mass > this.mass * 1.1) {
+                    if (distance < nearestThreatDistance) {
+                        nearestThreat = cell;
+                        nearestThreatDistance = distance;
+                    }
+                } else if (cell.mass < this.mass * 0.9) {
+                    if (distance < nearestPreyDistance) {
+                        nearestPrey = cell;
+                        nearestPreyDistance = distance;
+                    }
+                }
+            }
+        }
+        
+        if (nearestThreat && nearestThreatDistance < 200) {
+            this.behavior = 'evading';
+            const escapeDirection = this.position.subtract(nearestThreat.position).normalize();
+            this.targetPosition = this.position.add(escapeDirection.multiply(300));
+        } else if (nearestPrey && nearestPreyDistance < 300) {
+            this.behavior = 'chasing';
+            this.targetPosition = nearestPrey.position;
+        } else {
+            this.behavior = 'roaming';
+            
+            if (!this.roamingTarget || Math.random() < 0.1) {
+                const nearestPellet = this.findNearestPellet(pellets);
+                
+                if (nearestPellet && Math.random() < 0.6) {
+                    this.roamingTarget = nearestPellet.position;
+                } else {
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = 200 + Math.random() * 300;
+                    this.roamingTarget = new Vector2(
+                        this.position.x + Math.cos(angle) * distance,
+                        this.position.y + Math.sin(angle) * distance
+                    );
+                }
+            }
+        }
+    }
+    
+    findNearestPellet(pellets) {
+        let nearest = null;
+        let nearestDistance = Infinity;
+        
+        for (let pellet of pellets) {
+            const distance = this.position.distance(pellet.position);
+            if (distance < nearestDistance && distance < 300) {
+                nearest = pellet;
+                nearestDistance = distance;
+            }
+        }
+        
+        return nearest;
+    }
+}
+
+class Camera {
+    constructor(canvas) {
+        this.position = new Vector2(0, 0);
+        this.zoom = 1;
+        this.targetZoom = 1;
+        this.canvas = canvas;
+        this.zoomConstant = 800;
+    }
+    
+    follow(target) {
+        const smoothing = 0.1;
+        this.position = new Vector2(
+            this.position.x + (target.position.x - this.position.x) * smoothing,
+            this.position.y + (target.position.y - this.position.y) * smoothing
+        );
+        
+        this.targetZoom = this.zoomConstant / Math.sqrt(target.mass);
+        this.targetZoom = Math.max(0.3, Math.min(2, this.targetZoom));
+        
+        const zoomSmoothing = 0.05;
+        this.zoom += (this.targetZoom - this.zoom) * zoomSmoothing;
+    }
+    
+    worldToScreen(worldPos) {
+        const offsetX = worldPos.x - this.position.x;
+        const offsetY = worldPos.y - this.position.y;
+        
+        return new Vector2(
+            this.canvas.width / 2 + offsetX * this.zoom,
+            this.canvas.height / 2 + offsetY * this.zoom
+        );
+    }
+    
+    screenToWorld(screenPos) {
+        const offsetX = (screenPos.x - this.canvas.width / 2) / this.zoom;
+        const offsetY = (screenPos.y - this.canvas.height / 2) / this.zoom;
+        
+        return new Vector2(
+            this.position.x + offsetX,
+            this.position.y + offsetY
+        );
+    }
+}
+
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.worldWidth = 4000;
+        this.worldHeight = 4000;
+        this.player = null;
+        this.cells = [];
+        this.pellets = [];
+        this.camera = new Camera(this.canvas);
+        this.lastTime = 0;
+        this.isRunning = false;
+        this.mousePosition = new Vector2(0, 0);
+        this.audioContext = null;
+        
+        this.resizeCanvas();
+        this.setupEventListeners();
+        this.initAudio();
+    }
+    
+    initAudio() {
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.log('Web Audio API not supported');
+        }
+    }
+    
+    playEatSound() {
+        if (!this.audioContext) return;
+        
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(this.audioContext.destination);
+        
+        oscillator.frequency.setValueAtTime(400, this.audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(800, this.audioContext.currentTime + 0.1);
+        
+        gainNode.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.1);
+        
+        oscillator.start(this.audioContext.currentTime);
+        oscillator.stop(this.audioContext.currentTime + 0.1);
+    }
+    
+    resizeCanvas() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+    }
+    
+    setupEventListeners() {
+        window.addEventListener('resize', () => this.resizeCanvas());
+        
+        this.canvas.addEventListener('mousemove', (e) => {
+            this.mousePosition = new Vector2(e.clientX, e.clientY);
+        });
+        
+        this.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            this.mousePosition = new Vector2(touch.clientX, touch.clientY);
+        });
+        
+        this.canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            this.mousePosition = new Vector2(touch.clientX, touch.clientY);
+        });
+        
+        document.getElementById('startButton').addEventListener('click', () => {
+            this.start();
+        });
+    }
+    
+    start() {
+        document.getElementById('startScreen').classList.add('hidden');
+        document.getElementById('instructions').style.display = 'none';
+        
+        this.player = new Cell(
+            this.worldWidth / 2,
+            this.worldHeight / 2,
+            Math.PI * 10 * 10,
+            this.randomCellColor(),
+            true
+        );
+        
+        this.cells = [this.player];
+        
+        for (let i = 0; i < 15; i++) {
+            const mass = Math.PI * (15 + Math.random() * 20) ** 2;
+            this.cells.push(new AICell(
+                Math.random() * this.worldWidth,
+                Math.random() * this.worldHeight,
+                mass,
+                this.randomCellColor()
+            ));
+        }
+        
+        this.generatePellets(300);
+        
+        this.isRunning = true;
+        this.lastTime = performance.now();
+        requestAnimationFrame((time) => this.gameLoop(time));
+    }
+    
+    randomCellColor() {
+        const hue = Math.random() * 360;
+        return `hsl(${hue}, 65%, 55%)`;
+    }
+    
+    generatePellets(count) {
+        for (let i = 0; i < count; i++) {
+            this.pellets.push(new Pellet(
+                Math.random() * this.worldWidth,
+                Math.random() * this.worldHeight,
+                Math.PI * (2 + Math.random() * 2) ** 2
+            ));
+        }
+    }
+    
+    gameLoop(currentTime) {
+        if (!this.isRunning) return;
+        
+        const deltaTime = Math.min((currentTime - this.lastTime) / 1000, 0.1);
+        this.lastTime = currentTime;
+        
+        this.update(deltaTime);
+        this.render();
+        
+        requestAnimationFrame((time) => this.gameLoop(time));
+    }
+    
+    update(deltaTime) {
+        const worldTarget = this.camera.screenToWorld(this.mousePosition);
+        this.player.targetPosition = worldTarget;
+        
+        for (let cell of this.cells) {
+            if (cell instanceof AICell) {
+                cell.updateAI(deltaTime, this.cells, this.pellets);
+            }
+            cell.update(deltaTime, this.worldWidth, this.worldHeight);
+        }
+        
+        this.checkCollisions();
+        
+        if (this.pellets.length < 250) {
+            this.generatePellets(10);
+        }
+        
+        this.camera.follow(this.player);
+        
+        document.getElementById('massValue').textContent = Math.floor(this.player.mass);
+    }
+    
+    checkCollisions() {
+        for (let i = this.pellets.length - 1; i >= 0; i--) {
+            const pellet = this.pellets[i];
+            
+            for (let cell of this.cells) {
+                const distance = cell.position.distance(pellet.position);
+                
+                if (distance < cell.radius) {
+                    cell.addMass(pellet.mass);
+                    this.pellets.splice(i, 1);
+                    
+                    if (cell === this.player) {
+                        this.playEatSound();
+                    }
+                    break;
+                }
+            }
+        }
+        
+        for (let i = this.cells.length - 1; i >= 0; i--) {
+            for (let j = i - 1; j >= 0; j--) {
+                const cell1 = this.cells[i];
+                const cell2 = this.cells[j];
+                
+                const distance = cell1.position.distance(cell2.position);
+                const minDistance = (cell1.radius + cell2.radius) * 0.7;
+                
+                if (distance < minDistance) {
+                    if (cell1.mass > cell2.mass * 1.1) {
+                        cell1.addMass(cell2.mass);
+                        this.cells.splice(j, 1);
+                        
+                        if (cell1 === this.player) {
+                            this.playEatSound();
+                        }
+                        
+                        if (cell2 === this.player) {
+                            this.gameOver();
+                        } else {
+                            this.spawnAICell();
+                        }
+                        i--;
+                        break;
+                    } else if (cell2.mass > cell1.mass * 1.1) {
+                        cell2.addMass(cell1.mass);
+                        this.cells.splice(i, 1);
+                        
+                        if (cell2 === this.player) {
+                            this.playEatSound();
+                        }
+                        
+                        if (cell1 === this.player) {
+                            this.gameOver();
+                        } else {
+                            this.spawnAICell();
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    spawnAICell() {
+        if (this.cells.length < 20) {
+            const edge = Math.floor(Math.random() * 4);
+            let x, y;
+            
+            switch (edge) {
+                case 0:
+                    x = Math.random() * this.worldWidth;
+                    y = 0;
+                    break;
+                case 1:
+                    x = this.worldWidth;
+                    y = Math.random() * this.worldHeight;
+                    break;
+                case 2:
+                    x = Math.random() * this.worldWidth;
+                    y = this.worldHeight;
+                    break;
+                case 3:
+                    x = 0;
+                    y = Math.random() * this.worldHeight;
+                    break;
+            }
+            
+            const mass = Math.PI * (15 + Math.random() * 20) ** 2;
+            this.cells.push(new AICell(x, y, mass, this.randomCellColor()));
+        }
+    }
+    
+    gameOver() {
+        this.isRunning = false;
+        
+        setTimeout(() => {
+            document.getElementById('startScreen').classList.remove('hidden');
+            document.getElementById('instructions').style.display = 'block';
+        }, 500);
+    }
+    
+    render() {
+        this.ctx.fillStyle = '#0a0a0a';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        this.drawGrid();
+        
+        for (let pellet of this.pellets) {
+            pellet.draw(this.ctx, this.camera);
+        }
+        
+        this.cells.sort((a, b) => a.radius - b.radius);
+        
+        for (let cell of this.cells) {
+            cell.draw(this.ctx, this.camera);
+        }
+    }
+    
+    drawGrid() {
+        const gridSize = 100;
+        const startX = Math.floor((this.camera.position.x - this.canvas.width / (2 * this.camera.zoom)) / gridSize) * gridSize;
+        const startY = Math.floor((this.camera.position.y - this.canvas.height / (2 * this.camera.zoom)) / gridSize) * gridSize;
+        const endX = this.camera.position.x + this.canvas.width / (2 * this.camera.zoom);
+        const endY = this.camera.position.y + this.canvas.height / (2 * this.camera.zoom);
+        
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        
+        for (let x = startX; x <= endX; x += gridSize) {
+            const screenPos = this.camera.worldToScreen(new Vector2(x, 0));
+            this.ctx.moveTo(screenPos.x, 0);
+            this.ctx.lineTo(screenPos.x, this.canvas.height);
+        }
+        
+        for (let y = startY; y <= endY; y += gridSize) {
+            const screenPos = this.camera.worldToScreen(new Vector2(0, y));
+            this.ctx.moveTo(0, screenPos.y);
+            this.ctx.lineTo(this.canvas.width, screenPos.y);
+        }
+        
+        this.ctx.stroke();
+    }
+}
+
+window.addEventListener('load', () => {
+    new Game();
+});
+    </script>
+</body>
+</html>
