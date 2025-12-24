@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cell Wars PRO</title>
+    <style>
+        body{margin:0;background:#050505;color:#fff;font-family:sans-serif;overflow:hidden;touch-action:none;user-select:none}
+        #ui{position:absolute;top:20px;left:20px;pointer-events:none;text-shadow:0 0 10px #000}
+        #mass{font-size:24px;color:#00d4ff;font-weight:bold}
+        #start{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:10}
+        #start h1{font-size:60px;color:#00d4ff;margin:0;text-shadow:0 0 20px rgba(0,212,255,0.5)}
+        button{padding:15px 40px;font-size:20px;background:#00d4ff;border:none;border-radius:30px;color:#000;font-weight:bold;cursor:pointer;margin-top:20px}
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div id="mass">Masa: 10</div>
+        <div id="rank">Ranking: #1</div>
+    </div>
+    <div id="start">
+        <h1>CELL WARS</h1>
+        <p>Devora células. Domina el mapa.</p>
+        <button onclick="startGame()">COMENZAR</button>
+    </div>
+    <canvas id="c"></canvas>
+    <script>
+        const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+        let w,h,player,foods=[],enemies=[],particles=[],gameActive=false;
+        const CONFIG={food:400,enemies:25,world:3000};
+        
+        function resize(){w=canvas.width=window.innerWidth;h=canvas.height=window.innerHeight}
+        window.onresize=resize;resize();
+
+        class Entity{
+            constructor(x,y,m,c){this.x=x;this.y=y;this.m=m;this.c=c;this.vx=0;this.vy=0}
+            get r(){return Math.sqrt(this.m/Math.PI)*5}
+            draw(cx,cy){
+                let sx=this.x-cx+w/2,sy=this.y-cy+h/2;
+                if(sx<-this.r*2||sx>w+this.r*2||sy<-this.r*2||sy>h+this.r*2)return;
+                ctx.beginPath();ctx.arc(sx,sy,this.r,0,Math.PI*2);
+                ctx.fillStyle=this.c;ctx.shadowBlur=15;ctx.shadowColor=this.c;ctx.fill();
+                ctx.shadowBlur=0;ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.stroke();
+            }
+        }
+
+        function startGame(){
+            document.getElementById('start').style.display='none';
+            player=new Entity(CONFIG.world/2,CONFIG.world/2,15,'#00d4ff');
+            foods=[];enemies=[];gameActive=true;
+            for(let i=0;i<CONFIG.food;i++)spawnFood();
+            for(let i=0;i<CONFIG.enemies;i++)spawnEnemy();
+            loop();
+        }
+
+        function spawnFood(){foods.push({x:Math.random()*CONFIG.world,y:Math.random()*CONFIG.world,c:`hsl(${Math.random()*360},70%,60%)`,r:2})}
+        function spawnEnemy(){
+            let colors=['#ff4757','#2ed573','#ffa502','#eccc68','#70a1ff'];
+            enemies.push(new Entity(Math.random()*CONFIG.world,Math.random()*CONFIG.world,10+Math.random()*40,colors[Math.floor(Math.random()*colors.length)]));
+        }
+
+        let mx=CONFIG.world/2,my=CONFIG.world/2;
+        canvas.onmousemove=e=>{mx=e.clientX;my=e.clientY};
+        canvas.ontouchmove=e=>{mx=e.touches[0].clientX;my=e.touches[0].clientY};
+
+        function loop(){
+            if(!gameActive)return;
+            ctx.fillStyle='#050505';ctx.fillRect(0,0,w,h);
+            
+            // Grid
+            ctx.strokeStyle='#111';ctx.lineWidth=1;
+            for(let x=-(player.x%50);x<w;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}
+            for(let y=-(player.y%50);y<h;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}
+
+            // Player logic
+            let dx=mx-w/2,dy=my-h/2,dist=Math.sqrt(dx*dx+dy*dy);
+            if(dist>5){
+                let speed=Math.max(1, 10/Math.sqrt(player.m));
+                player.x+=dx/dist*speed;player.y+=dy/dist*speed;
+            }
+            player.x=Math.max(0,Math.min(CONFIG.world,player.x));
+            player.y=Math.max(0,Math.min(CONFIG.world,player.y));
+
+            // Food logic
+            foods.forEach((f,i)=>{
+                let d=Math.sqrt((f.x-player.x)**2+(f.y-player.y)**2);
+                if(d<player.r){player.m+=0.5;foods.splice(i,1);spawnFood()}
+                let sx=f.x-player.x+w/2,sy=f.y-player.y+h/2;
+                ctx.fillStyle=f.c;ctx.beginPath();ctx.arc(sx,sy,f.r,0,7);ctx.fill();
+            });
+
+            // Enemy logic
+            enemies.forEach((e,i)=>{
+                let edx=player.x-e.x,edy=player.y-e.y,edist=Math.sqrt(edx*edx+edy*edy);
+                if(edist<1000){
+                    let espeed=Math.max(0.5, 8/Math.sqrt(e.m));
+                    if(e.m>player.m*1.1){e.x+=edx/edist*espeed;e.y+=edy/edist*espeed}
+                    else if(player.m>e.m*1.1){e.x-=edx/edist*espeed;e.y-=edy/edist*espeed}
+                }
+                e.x=Math.max(0,Math.min(CONFIG.world,e.x));
+                e.y=Math.max(0,Math.min(CONFIG.world,e.y));
+                
+                if(edist<player.r+e.r){
+                    if(player.m>e.m*1.1){player.m+=e.m/2;enemies.splice(i,1);spawnEnemy()}
+                    else if(e.m>player.m*1.1){gameActive=false;alert('FIN DEL JUEGO! Masa: '+Math.floor(player.m));location.reload()}
+                }
+                e.draw(player.x,player.y);
+            });
+
+            player.draw(player.x,player.y);
+            document.getElementById('mass').innerText='Masa: '+Math.floor(player.m);
+            requestAnimationFrame(loop);
+        }
+    </script>
+</body>
+</html>
