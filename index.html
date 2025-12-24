@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEBULA ULTIMATE: CUSTOM EDITION</title>
+    <style>
+        :root {
+            --cyan: #00f2ff; --magenta: #ff00ea; --lime: #39ff14; --gold: #ffca28;
+            --bg: #020205; --panel: rgba(10, 10, 20, 0.98);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; user-select: none; }
+        body { 
+            background: var(--bg); color: white; overflow: hidden;
+            font-family: 'Segoe UI', sans-serif; width: 100vw; height: 100vh;
+        }
+        canvas { display: block; position: absolute; z-index: 1; }
+
+        /* Capas de UI */
+        .overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.85);
+            display: flex; align-items: center; justify-content: center; z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+        .panel {
+            background: var(--panel); border: 2px solid var(--cyan);
+            padding: 30px; border-radius: 25px; width: 90%; max-width: 450px; text-align: center;
+            box-shadow: 0 0 50px rgba(0, 242, 255, 0.2);
+        }
+        h1 { font-size: 3rem; color: var(--cyan); text-shadow: 0 0 20px var(--cyan); margin-bottom: 15px; }
+
+        /* HUD */
+        #hud { position: absolute; top: 20px; left: 20px; z-index: 100; pointer-events: none; }
+        #coins-hud { position: absolute; top: 20px; right: 20px; z-index: 100; color: var(--gold); font-weight: bold; }
+        .stat { font-size: 1.1rem; text-shadow: 0 0 10px black; margin-bottom: 5px; }
+        .btn-exit {
+            margin-top: 10px; background: rgba(255, 0, 234, 0.1); border: 1px solid var(--magenta);
+            color: var(--magenta); padding: 8px 15px; font-weight: bold; border-radius: 5px; 
+            cursor: pointer; pointer-events: auto; transition: 0.3s;
+        }
+
+        /* Skin Store */
+        .upload-box {
+            margin: 15px 0; padding: 15px; border: 2px dashed var(--cyan); border-radius: 15px;
+            background: rgba(0, 242, 255, 0.05);
+        }
+        .upload-btn {
+            display: inline-block; padding: 10px 20px; background: var(--cyan); color: black;
+            font-weight: bold; border-radius: 10px; cursor: pointer; font-size: 0.9rem;
+        }
+        .skin-grid { 
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; 
+            margin: 15px 0; max-height: 200px; overflow-y: auto;
+        }
+        .skin-item {
+            background: #111; border: 2px solid #333; border-radius: 12px;
+            padding: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center;
+        }
+        .skin-item.selected { border-color: var(--cyan); box-shadow: 0 0 15px var(--cyan); }
+        .dot { width: 40px; height: 40px; border-radius: 50%; margin-bottom: 5px; background-size: cover; background-position: center; }
+
+        .btn-play {
+            background: linear-gradient(45deg, var(--magenta), #7000ff);
+            border: none; color: white; padding: 15px; font-weight: 900;
+            border-radius: 50px; cursor: pointer; width: 100%; font-size: 1.2rem;
+            box-shadow: 0 0 20px var(--magenta);
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="hud">
+        <div class="stat" style="color:var(--cyan)">MASA: <span id="val-m">0</span></div>
+        <div class="stat" style="font-size:0.8rem; color:#aaa">RÉCORD: <span id="val-h">0</span></div>
+        <button id="btn-exit" class="btn-exit">✖ SALIR AL MENÚ</button>
+    </div>
+    <div id="coins-hud" class="stat">🪙 <span id="val-c">0</span></div>
+
+    <!-- Menú Principal -->
+    <div id="menu" class="overlay">
+        <div class="panel">
+            <h1>NEBULA</h1>
+            <div class="upload-box">
+                <p style="font-size: 0.7rem; color: #888; margin-bottom: 8px;">SUBE TU IMAGEN PERSONALIZADA</p>
+                <label for="img-in" class="upload-btn">📸 CARGAR FOTO</label>
+                <input type="file" id="img-in" accept="image/*" style="display:none">
+            </div>
+            <div class="skin-grid" id="skin-grid"></div>
+            <button class="btn-play" id="btn-play">JUGAR AHORA</button>
+        </div>
+    </div>
+
+    <!-- Game Over -->
+    <div id="death" class="overlay hidden">
+        <div class="panel" style="border-color: var(--magenta);">
+            <h1 style="color:var(--magenta)">GAME OVER</h1>
+            <p id="death-stat" style="margin: 20px 0; color:#ccc"></p>
+            <button class="btn-play" onclick="location.reload()">REINTENTAR</button>
+        </div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+<script>
+/**
+ * NEBULA ENGINE v3.5 - FULL STABLE
+ */
+
+const CONFIG = {
+    WORLD: 4000, BOTS: 15, FOOD: 400,
+    SKINS: [
+        {id: 'p1', name: 'CYAN', color: '#00f2ff', price: 0},
+        {id: 'p2', name: 'ROSE', color: '#ff00ea', price: 200},
+        {id: 'p3', name: 'LIME', color: '#39ff14', price: 500},
+        {id: 'custom', name: 'MÍA', color: '#ffffff', price: 0}
+    ]
+};
+
+// Datos
+let db = JSON.parse(localStorage.getItem('nebula_final')) || {
+    coins: 0, high: 0, unlocked: ['p1', 'custom'], active: 'p1', customImg: null
+};
+const save = () => localStorage.setItem('nebula_final', JSON.stringify(db));
+
+// Imagen en caché
+let customImgObj = new Image();
+if (db.customImg) customImgObj.src = db.customImg;
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H, isLive = false, player, foods = [], bots = [], mouse = {x: 0, y: 0};
+
+function resize() { W = window.innerWidth; H = window.innerHeight; canvas.width = W; canvas.height = H; }
+window.onresize = resize; resize();
+
+class Entity {
+    constructor(x, y, mass, color, isPlayer = false) {
+        this.x = x; this.y = y; this.mass = mass; this.color = color;
+        this.isPlayer = isPlayer;
+        this.updateR();
+    }
+    updateR() { this.r = Math.sqrt(this.mass / Math.PI) * 12; }
+    
+    draw(cx, cy) {
+        const sx = this.x - cx + W/2; const sy = this.y - cy + H/2;
+        if (sx + this.r < 0 || sx - this.r > W || sy + this.r < 0 || sy - this.r > H) return;
+
+        ctx.save();
+        ctx.translate(sx, sy);
+
+        if (this.isPlayer && db.active === 'custom' && db.customImg) {
+            // Dibujar imagen circular
+            ctx.beginPath(); ctx.arc(0, 0, this.r, 0, Math.PI*2); ctx.clip();
+            ctx.drawImage(customImgObj, -this.r, -this.r, this.r*2, this.r*2);
+            ctx.beginPath(); ctx.arc(0, 0, this.r, 0, Math.PI*2); ctx.strokeStyle = '#00f2ff'; ctx.lineWidth = 3; ctx.stroke();
+        } else {
+            // Dibujar Neon estándar
+            ctx.shadowBlur = 15; ctx.shadowColor = this.color;
+            let g = ctx.createRadialGradient(0, 0, 0, 0, 0, this.r);
+            g.addColorStop(0, '#fff'); g.addColorStop(0.2, this.color); g.addColorStop(1, 'rgba(0,0,0,0.6)');
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.arc(0, 0, this.r, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
+    }
+}
+
+class Player extends Entity {
+    update() {
+        let dx = mouse.x - W/2, dy = mouse.y - H/2, d = Math.hypot(dx, dy);
+        if (d > 5) {
+            let s = Math.max(1.5, 8 - (this.r/50));
+            this.x += (dx/d) * s; this.y += (dy/d) * s;
+        }
+        this.x = Math.max(0, Math.min(CONFIG.WORLD, this.x));
+        this.y = Math.max(0, Math.min(CONFIG.WORLD, this.y));
+        this.updateR();
+    }
+}
+
+class Bot extends Entity {
+    constructor(x, y, mass, color) {
+        super(x, y, mass, color);
+        this.target = null;
+    }
+    update() {
+        // IA CONSTANTE Y AGRESIVA
+        let prey = [player, ...bots].filter(e => e !== this && e.mass < this.mass * 0.85);
+        let threat = [player, ...bots].filter(e => e !== this && e.mass > this.mass * 1.15);
+        let dx, dy;
+
+        let nearT = threat.find(t => Math.hypot(this.x - t.x, this.y - t.y) < 300);
+        if (nearT) {
+            dx = this.x - nearT.x; dy = this.y - nearT.y; // HUIR
+        } else {
+            let nearP = prey.find(p => Math.hypot(this.x - p.x, this.y - p.y) < 500);
+            if (nearP) {
+                dx = nearP.x - this.x; dy = nearP.y - this.y; // PERSEGUIR
+            } else {
+                if (!this.target || Math.hypot(this.x-this.target.x, this.y-this.target.y) < 20) {
+                    this.target = foods[Math.floor(Math.random()*foods.length)];
+                }
+                dx = this.target.x - this.x; dy = this.target.y - this.y; // COMER COMIDA
+            }
+        }
+        let d = Math.hypot(dx, dy);
+        let s = Math.max(1, 6 - (this.r/45));
+        this.x += (dx/d) * s; this.y += (dy/d) * s;
+        this.x = Math.max(0, Math.min(CONFIG.WORLD, this.x));
+        this.y = Math.max(0, Math.min(CONFIG.WORLD, this.y));
+        this.updateR();
+    }
+}
+
+function spawnFood() {
+    foods.push({x: Math.random()*CONFIG.WORLD, y: Math.random()*CONFIG.WORLD, c: `hsl(${Math.random()*360}, 100%, 50%)`});
+}
+
+function init() {
+    const skin = CONFIG.SKINS.find(s => s.id === db.active) || CONFIG.SKINS[0];
+    player = new Player(CONFIG.WORLD/2, CONFIG.WORLD/2, 25, skin.color, true);
+    foods = []; for(let i=0; i<CONFIG.FOOD; i++) spawnFood();
+    bots = []; for(let i=0; i<CONFIG.BOTS; i++) spawnBot();
+}
+
+function spawnBot() {
+    bots.push(new Bot(Math.random()*CONFIG.WORLD, Math.random()*CONFIG.WORLD, 30 + Math.random()*150, CONFIG.SKINS[Math.floor(Math.random()*3)].color));
+}
+
+function loop() {
+    if (!isLive) return;
+
+    ctx.fillStyle = '#020205'; ctx.fillRect(0, 0, W, H);
+    
+    // Grid
+    ctx.strokeStyle = '#0a0a1a'; ctx.lineWidth = 1;
+    let step = 100;
+    let ox = (W/2 - player.x) % step; let oy = (H/2 - player.y) % step;
+    for(let x=ox; x<W; x+=step) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for(let y=oy; y<H; y+=step) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+    player.update();
+
+    // Colisiones Comida
+    foods = foods.filter(f => {
+        if (Math.hypot(player.x - f.x, player.y - f.y) < player.r) { 
+            player.mass += 1.8; db.coins += 1; return false; 
+        }
+        return true;
+    });
+    while(foods.length < CONFIG.FOOD) spawnFood();
+
+    // Colisiones Bots
+    bots.forEach((b, i) => {
+        b.update();
+        let dist = Math.hypot(player.x - b.x, player.y - b.y);
+        if (dist < player.r + b.r) {
+            if (player.mass > b.mass * 1.15) {
+                player.mass += b.mass * 0.5; db.coins += 100;
+                bots[i] = new Bot(Math.random()*CONFIG.WORLD, Math.random()*CONFIG.WORLD, 40, '#fff'); // Respawnea
+            } else if (b.mass > player.mass * 1.15) {
+                end();
+            }
+        }
+        b.draw(player.x, player.y);
+    });
+
+    foods.forEach(f => {
+        ctx.fillStyle = f.c; ctx.beginPath(); ctx.arc(f.x - player.x + W/2, f.y - player.y + H/2, 5, 0, Math.PI*2); ctx.fill();
+    });
+
+    player.draw(player.x, player.y);
+
+    document.getElementById('val-m').innerText = Math.floor(player.mass);
+    document.getElementById('val-c').innerText = db.coins;
+    if (player.mass > db.high) { db.high = player.mass; save(); }
+    document.getElementById('val-h').innerText = Math.floor(db.high);
+
+    requestAnimationFrame(loop);
+}
+
+function end() {
+    isLive = false; document.getElementById('death').classList.remove('hidden');
+    document.getElementById('death-stat').innerText = `MASA: ${Math.floor(player.mass)} | MONEDAS: ${db.coins}`;
+    save();
+}
+
+// UI & Skins
+function renderSkins() {
+    const grid = document.getElementById('skin-grid');
+    grid.innerHTML = '';
+    CONFIG.SKINS.forEach(s => {
+        const item = document.createElement('div');
+        item.className = `skin-item ${db.active === s.id ? 'selected' : ''}`;
+        let style = `background-color: ${s.color}`;
+        if (s.id === 'custom' && db.customImg) style = `background-image: url(${db.customImg})`;
+        item.innerHTML = `<div class="dot" style="${style}"></div><p style="font-size:0.6rem">${s.name}</p>`;
+        item.onclick = () => { db.active = s.id; save(); renderSkins(); };
+        grid.appendChild(item);
+    });
+}
+
+document.getElementById('img-in').onchange = (e) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+            const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+            c.getContext('2d').drawImage(img, 0, 0, 256, 256);
+            db.customImg = c.toDataURL('image/jpeg', 0.8);
+            db.active = 'custom'; customImgObj.src = db.customImg;
+            save(); renderSkins();
+        };
+        img.src = ev.target.result;
+    };
+    reader.readAsDataURL(e.target.files[0]);
+};
+
+document.getElementById('btn-play').onclick = () => { document.getElementById('menu').classList.add('hidden'); isLive = true; init(); loop(); };
+document.getElementById('btn-exit').onclick = () => { isLive = false; document.getElementById('menu').classList.remove('hidden'); renderSkins(); };
+window.onmousemove = e => { mouse.x = e.clientX; mouse.y = e.clientY; };
+window.ontouchmove = e => { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; e.preventDefault(); };
+
+renderSkins();
+document.getElementById('val-c').innerText = db.coins;
+document.getElementById('val-h').innerText = Math.floor(db.high);
+</script>
+</body>
+</html>
+
+
