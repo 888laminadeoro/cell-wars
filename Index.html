@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Escape</title>
+  <style>
+    :root{
+      --bg0:#02020a;
+      --bg1:#0b1530;
+      --panelA:rgba(6,10,29,0.96);
+      --panelB:rgba(32,10,56,0.96);
+      --text:#f9f9ff;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    #game-container{
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: radial-gradient(circle at top, var(--bg1) 0, var(--bg0) 55%, #000 100%);
+    }
+
+    header{
+      position: relative;
+      z-index: 10;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(to right, rgba(3,8,25,0.92), rgba(36,12,62,0.92));
+      box-shadow: 0 4px 18px rgba(0,0,0,0.6);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    header .title-block{display:flex; flex-direction:column; gap:0;}
+    header h1{font-size: 18px; margin:0; letter-spacing:.08em; text-transform:uppercase;}
+    header .subtitle{font-size: 11px; opacity: .8;}
+
+    header .stat-block{display:flex; flex-direction:column; align-items:flex-end; gap:2px; font-size:11px;}
+    header .badge{
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ffce54, #ff8c3a);
+      color: #2b1b05;
+      font-weight: 700;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    #hud-bar{
+      position: relative;
+      z-index: 9;
+      padding: 5px 10px 6px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      background: linear-gradient(to right, rgba(4,13,33,0.92), rgba(25,5,45,0.92));
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    #hud-left, #hud-right{display:flex; align-items:center; gap:10px; font-size:11px;}
+    .hud-label{font-size:10px; text-transform:uppercase; letter-spacing:.09em; opacity:.7;}
+    .hud-value{font-weight:700; letter-spacing:.04em;}
+    .hud-pill{
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    #canvas-wrapper{
+      position: relative;
+      flex: 1;
+      min-height: 0; /* fix flex + canvas en algunos móviles */
+      overflow: hidden;
+    }
+
+    #gameCanvas{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      display:block;
+      background: radial-gradient(circle at center, #050510 0, #010109 50%, #000 100%);
+    }
+
+    /* Panel personalización */
+    #side-panel{
+      position:absolute;
+      z-index:20;
+      right: 8px;
+      top: 72px;
+      width: 210px;
+      max-width: 60vw;
+      padding: 8px 10px;
+      border-radius: 14px;
+      background: linear-gradient(145deg, var(--panelA), var(--panelB));
+      box-shadow: 0 10px 30px rgba(0,0,0,0.85);
+      border: 1px solid rgba(150,130,255,0.3);
+      backdrop-filter: blur(10px);
+      color: #f7f2ff;
+      user-select: none;
+    }
+    .panel-title{font-size:12px; text-transform:uppercase; letter-spacing:.12em; opacity:.85; margin-bottom:4px;}
+    .panel-subtitle{font-size:11px; opacity:.7; margin-bottom:8px;}
+
+    .skin-grid{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .skin{
+      width:34px;
+      height:34px;
+      border-radius:50%;
+      border:2px solid transparent;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 0 10px rgba(0,0,0,0.8);
+      cursor:pointer;
+      position:relative;
+      overflow:hidden;
+    }
+    .skin.active{
+      border-color:#ffd265;
+      box-shadow: 0 0 0 1px rgba(255,210,101,0.6), 0 0 14px rgba(255,210,101,0.9);
+    }
+    .skin::after{
+      content:"";
+      position:absolute; inset:0;
+      background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.4) 0, transparent 55%);
+      mix-blend-mode: screen;
+      opacity:.8;
+      pointer-events:none;
+    }
+
+    .skin-label-row{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      font-size:10px;
+      opacity:.75;
+      margin-bottom:6px;
+    }
+
+    #color-picker{
+      width:100%;
+      height:26px;
+      border-radius:999px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background:
+        radial-gradient(circle at 0% 50%, #ff6b6b, transparent 35%),
+        radial-gradient(circle at 25% 50%, #ffd93d, transparent 35%),
+        radial-gradient(circle at 50% 50%, #6bffb5, transparent 35%),
+        radial-gradient(circle at 75% 50%, #6ba8ff, transparent 35%),
+        radial-gradient(circle at 100% 50%, #e66bff, transparent 35%);
+      overflow:hidden;
+      position:relative;
+      margin-bottom: 6px;
+    }
+    #color-picker input[type="color"]{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      opacity:0;
+      cursor:pointer;
+    }
+
+    .panel-footer{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      font-size:10px;
+    }
+    .gold-pill{
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ffe685, #ffb347);
+      color: #4b320c;
+      font-weight: 800;
+      box-shadow: 0 0 12px rgba(255,210,101,0.7);
+      cursor: pointer;
+    }
+    .small-text{opacity:.65;}
+
+    /* Joystick */
+    #joystick{
+      position:absolute;
+      left: 12px;
+      bottom: 22px;
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      background: radial-gradient(circle at center, rgba(255,255,255,0.08), rgba(0,0,0,0.95));
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 12px 26px rgba(0,0,0,0.9);
+      touch-action: none;
+      z-index: 20;
+      user-select: none;
+    }
+    #joystick-inner{
+      position:absolute;
+      left: 50%;
+      top: 50%;
+      width: 46px;
+      height: 46px;
+      margin-left:-23px;
+      margin-top:-23px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 20%, #ffffff, #9fa6ff);
+      box-shadow: 0 0 16px rgba(159,166,255,0.8);
+      transform: translate(0,0);
+      will-change: transform;
+    }
+
+    /* Overlay de estado */
+    #status{
+      position:absolute;
+      left: 10px;
+      top: 78px;
+      z-index: 30;
+      padding: 6px 8px;
+      border-radius: 10px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.10);
+      font-size: 11px;
+      opacity: 0.9;
+      pointer-events:none;
+      white-space: pre-wrap;
+      max-width: min(520px, 92vw);
+    }
+    #status.hidden{display:none;}
+
+    /* Mobile: panel abajo */
+    @media (max-width: 720px){
+      #side-panel{
+        right: 50%;
+        transform: translateX(50%);
+        bottom: 10px;
+        top: auto;
+        width: calc(100vw - 90px);
+        max-width: 380px;
+      }
+      #status{ top: 114px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <header>
+      <div class="title-block">
+        <h1>RL de Géminis</h1>
+        <span class="subtitle">Micro‑batalla cósmica de células</span>
+      </div>
+      <div class="stat-block">
+        <div class="badge">Season 1 · Beta</div>
+        <div style="font-size:11px; opacity:0.85;">
+          Mejor puntaje: <span id="bestScoreDisplay">0</span>
+        </div>
+      </div>
+    </header>
+
+    <div id="hud-bar">
+      <div id="hud-left">
+        <div>
+          <div class="hud-label">Masa</div>
+          <div class="hud-value" id="massHUD">0</div>
+        </div>
+        <div class="hud-pill">
+          <span class="hud-label">Nivel</span>
+          <span class="hud-value" id="levelHUD">1</span>
+        </div>
+      </div>
+      <div id="hud-right">
+        <div class="hud-pill">
+          <span class="hud-label">Enemigos</span>
+          <span class="hud-value" id="enemiesHUD">0</span>
+        </div>
+        <div class="hud-pill">
+          <span class="hud-label">Orbes</span>
+          <span class="hud-value" id="foodHUD">0</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="canvas-wrapper">
+      <canvas id="gameCanvas"></canvas>
+      <div id="status">Cargando…</div>
+
+      <div id="side-panel">
+        <div class="panel-title">Personaliza tu célula</div>
+        <div class="panel-subtitle">Toca un orbe o elige tu propio color.</div>
+        <div class="skin-grid" id="skinGrid"></div>
+
+        <div class="skin-label-row">
+          <span>Color libre</span>
+          <span id="currentColorLabel">#00D4FF</span>
+        </div>
+
+        <div id="color-picker">
+          <input type="color" id="colorInput" value="#00d4ff" />
+        </div>
+
+        <div class="panel-footer">
+          <div class="gold-pill" id="goldenBtn">Modo Géminis</div>
+          <div class="small-text">Tu estilo, tu órbita.</div>
+        </div>
+      </div>
+
+      <div id="joystick">
+        <div id="joystick-inner"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const statusEl = document.getElementById("status");
+      function status(msg, isError=false){
+        statusEl.classList.remove("hidden");
+        statusEl.style.borderColor = isError ? "rgba(255,90,90,0.55)" : "rgba(255,255,255,0.10)";
+        statusEl.textContent = msg;
+      }
+      function hideStatus(){ statusEl.classList.add("hidden"); }
+
+      window.addEventListener("error", (e) => {
+        status("ERROR JS:
+" + (e.message || "Error") + "
+" + (e.filename||"") + ":" + (e.lineno||"") , true);
+      });
+      window.addEventListener("unhandledrejection", (e) => {
+        status("PROMISE ERROR:
+" + (e.reason?.message || String(e.reason || "Error")), true);
+      });
+
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d", { alpha: false });
+
+      function resizeCanvas(){
+        const cssW = canvas.clientWidth || 0;
+        const cssH = canvas.clientHeight || 0;
+        const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+        if (cssW === 0 || cssH === 0){
+          status("Canvas con tamaño 0.
+Revisa CSS/flex.
+cssW=" + cssW + " cssH=" + cssH, true);
+          return;
+        }
+        canvas.width = Math.round(cssW * dpr);
+        canvas.height = Math.round(cssH * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      // Espera a layout
+      requestAnimationFrame(() => {
+        resizeCanvas();
+        window.addEventListener("resize", () => {
+          resizeCanvas();
+        }, { passive:true });
+      });
+
+      // ----------------- CONFIG JUEGO -----------------
+      const WORLD_SIZE = 3000;
+      const START_RADIUS = 24;
+      const MAX_RADIUS = 120;
+      const FOOD_COUNT = 250;
+      const ENEMY_COUNT = 12;
+
+      const player = {
+        x: WORLD_SIZE/2,
+        y: WORLD_SIZE/2,
+        radius: START_RADIUS,
+        color: "#00d4ff",
+        speed: 165 // px/seg (se ajusta por masa)
+      };
+
+      let foods = [];
+      let enemies = [];
+
+      // input (vector normalizado -1..1)
+      let inputX = 0, inputY = 0;
+
+      // best score
+      let bestScore = parseInt(localStorage.getItem("rlGeminisBestScore") || "0", 10);
+      document.getElementById("bestScoreDisplay").textContent = bestScore;
+
+      // ----------------- SKINS -----------------
+      const SKINS = [
+        { name:"Aqua", color:"#00d4ff" },
+        { name:"Neón", color:"#7b61ff" },
+        { name:"Corazón", color:"#ff4b81" },
+        { name:"Verde", color:"#1dd45e" },
+        { name:"Éter", color:"#9b5dff" },
+        { name:"Fuego", color:"#ff7b2c" },
+        { name:"Hielo", color:"#8cf1ff" },
+        { name:"Sombra", color:"#f9ff6b" }
+      ];
+
+      const skinGrid = document.getElementById("skinGrid");
+      const colorInput = document.getElementById("colorInput");
+      const currentColorLabel = document.getElementById("currentColorLabel");
+      const goldenBtn = document.getElementById("goldenBtn");
+
+      function buildSkinGrid(){
+        skinGrid.innerHTML = "";
+        SKINS.forEach((skin, i) => {
+          const d = document.createElement("div");
+          d.className = "skin";
+          d.dataset.index = String(i);
+          d.style.background =
+            i === 4 ? "conic-gradient(from 140deg, #9b5dff, #e05cff, #ff9a76, #ffe36b, #9b5dff)" :
+            i === 7 ? "radial-gradient(circle at 30% 20%, #fff, #5b5b5b)" :
+            skin.color;
+
+          d.addEventListener("click", () => selectSkin(i));
+          skinGrid.appendChild(d);
+        });
+      }
+
+      function setActiveSkinNone(){
+        document.querySelectorAll(".skin").forEach(el => el.classList.remove("active"));
+      }
+      function setActiveSkin(i){
+        setActiveSkinNone();
+        const el = document.querySelector('.skin[data-index="'+i+'"]');
+        if (el) el.classList.add("active");
+      }
+
+      function saveCustomization(){
+        localStorage.setItem("rlGeminisColor", player.color);
+      }
+      function loadCustomization(){
+        const saved = localStorage.getItem("rlGeminisColor");
+        if (saved){
+          player.color = saved;
+          colorInput.value = saved;
+          currentColorLabel.textContent = saved.toUpperCase();
+          // intenta marcar skin si coincide
+          const idx = SKINS.findIndex(s => s.color.toLowerCase() === saved.toLowerCase());
+          if (idx >= 0) setActiveSkin(idx); else setActiveSkinNone();
+        } else {
+          setActiveSkin(0);
+        }
+      }
+
+      function selectSkin(i){
+        const skin = SKINS[i];
+        if (!skin) return;
+        player.color = skin.color;
+        colorInput.value = skin.color;
+        currentColorLabel.textContent = skin.color.toUpperCase();
+        setActiveSkin(i);
+        saveCustomization();
+      }
+
+      colorInput.addEventListener("input", (e) => {
+        const v = e.target.value;
+        player.color = v;
+        currentColorLabel.textContent = v.toUpperCase();
+        setActiveSkinNone();
+        saveCustomization();
+      });
+
+      goldenBtn.addEventListener("click", () => {
+        player.color = "#f7d774";
+        colorInput.value = "#f7d774";
+        currentColorLabel.textContent = "#F7D774";
+        setActiveSkinNone();
+        saveCustomization();
+      });
+
+      buildSkinGrid();
+      loadCustomization();
+
+      // ----------------- JOYSTICK (Pointer Events) -----------------
+      const joystick = document.getElementById("joystick");
+      const inner = document.getElementById("joystick-inner");
+      let joyPointerId = null;
+
+      function setInner(dx, dy){
+        inner.style.transform = `translate(${dx}px, ${dy}px)`;
+      }
+
+      function joyFromPoint(clientX, clientY){
+        const rect = joystick.getBoundingClientRect();
+        const cx = rect.left + rect.width/2;
+        const cy = rect.top + rect.height/2;
+        let dx = clientX - cx;
+        let dy = clientY - cy;
+
+        const maxDist = rect.width/2 - 18;
+        const dist = Math.hypot(dx, dy);
+        if (dist > maxDist){
+          dx = dx/dist * maxDist;
+          dy = dy/dist * maxDist;
+        }
+        setInner(dx, dy);
+
+        const norm = dist === 0 ? 0 : Math.min(dist / maxDist, 1);
+        const ang = Math.atan2(dy, dx);
+        inputX = Math.cos(ang) * norm;
+        inputY = Math.sin(ang) * norm;
+      }
+
+      joystick.addEventListener("pointerdown", (e) => {
+        joyPointerId = e.pointerId;
+        joystick.setPointerCapture(joyPointerId);
+        joyFromPoint(e.clientX, e.clientY);
+      });
+
+      joystick.addEventListener("pointermove", (e) => {
+        if (joyPointerId !== e.pointerId) return;
+        joyFromPoint(e.clientX, e.clientY);
+      });
+
+      function joyEnd(){
+        joyPointerId = null;
+        setInner(0,0);
+        inputX = 0; inputY = 0;
+      }
+
+      joystick.addEventListener("pointerup", (e) => {
+        if (joyPointerId !== e.pointerId) return;
+        joyEnd();
+      });
+      joystick.addEventListener("pointercancel", (e) => {
+        if (joyPointerId !== e.pointerId) return;
+        joyEnd();
+      });
+
+      // ----------------- TECLADO PC -----------------
+      const keys = {};
+      window.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
+      window.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
+
+      function keyboardVector(){
+        let dx = 0, dy = 0;
+        if (keys["w"] || keys["arrowup"]) dy -= 1;
+        if (keys["s"] || keys["arrowdown"]) dy += 1;
+        if (keys["a"] || keys["arrowleft"]) dx -= 1;
+        if (keys["d"] || keys["arrowright"]) dx += 1;
+        const len = Math.hypot(dx, dy);
+        if (len > 0) return {x: dx/len, y: dy/len};
+        return {x: 0, y: 0};
+      }
+
+      // ----------------- UTIL -----------------
+      const rand = (min,max) => Math.random()*(max-min)+min;
+
+      function spawnFood(){
+        foods = [];
+        for (let i=0;i<FOOD_COUNT;i++){
+          foods.push({
+            x: rand(0, WORLD_SIZE),
+            y: rand(0, WORLD_SIZE),
+            radius: rand(3,6),
+            color: `hsl(${Math.floor(rand(0,360))}, 80%, 60%)`
+          });
+        }
+      }
+      function spawnEnemies(){
+        enemies = [];
+        for (let i=0;i<ENEMY_COUNT;i++){
+          enemies.push({
+            x: rand(0, WORLD_SIZE),
+            y: rand(0, WORLD_SIZE),
+            radius: rand(18,32),
+            color: `hsl(${Math.floor(rand(0,360))}, 70%, 55%)`,
+            vx: rand(-1,1),
+            vy: rand(-1,1)
+          });
+        }
+      }
+
+      function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+      spawnFood();
+      spawnEnemies();
+
+      // ----------------- GAMEPLAY -----------------
+      function growPlayer(amount){
+        const area = Math.PI*player.radius*player.radius + amount*8;
+        player.radius = Math.min(MAX_RADIUS, Math.sqrt(area/Math.PI));
+        const mass = Math.round(player.radius * 3);
+        if (mass > bestScore){
+          bestScore = mass;
+          localStorage.setItem("rlGeminisBestScore", String(bestScore));
+          document.getElementById("bestScoreDisplay").textContent = bestScore;
+        }
+      }
+
+      function resetGame(){
+        player.radius = START_RADIUS;
+        player.x = WORLD_SIZE/2;
+        player.y = WORLD_SIZE/2;
+        spawnFood();
+        spawnEnemies();
+      }
+
+      function updateHUD(){
+        const mass = Math.round(player.radius * 3);
+        const level = Math.max(1, Math.floor((player.radius - START_RADIUS)/10) + 1);
+        document.getElementById("massHUD").textContent = mass;
+        document.getElementById("levelHUD").textContent = level;
+        document.getElementById("enemiesHUD").textContent = enemies.length;
+        document.getElementById("foodHUD").textContent = foods.length;
+      }
+
+      function update(dt){
+        // mezcla teclado + joystick: si hay teclado, prioriza
+        const kb = keyboardVector();
+        let vx = kb.x, vy = kb.y;
+        if (vx === 0 && vy === 0){
+          vx = inputX; vy = inputY;
+        }
+
+        const massSlow = clamp(1.0 - (player.radius - START_RADIUS) / 200, 0.45, 1.0);
+        const speed = player.speed * massSlow;
+
+        player.x += vx * speed * dt;
+        player.y += vy * speed * dt;
+
+        player.x = clamp(player.x, player.radius, WORLD_SIZE - player.radius);
+        player.y = clamp(player.y, player.radius, WORLD_SIZE - player.radius);
+
+        // Comer comida
+        for (let i=foods.length-1;i>=0;i--){
+          const f = foods[i];
+          const d = Math.hypot(player.x - f.x, player.y - f.y);
+          if (d < player.radius + f.radius){
+            foods.splice(i,1);
+            growPlayer(1.5);
+          }
+        }
+        while (foods.length < FOOD_COUNT){
+          foods.push({
+            x: rand(0, WORLD_SIZE),
+            y: rand(0, WORLD_SIZE),
+            radius: rand(3,6),
+            color: `hsl(${Math.floor(rand(0,360))}, 80%, 60%)`
+          });
+        }
+
+        // IA enemigos
+        enemies.forEach(e => {
+          const dir = Math.atan2(player.y - e.y, player.x - e.x);
+          const fear = player.radius > e.radius * 1.25;
+          const aggro = e.radius > player.radius * 1.2;
+
+          if (fear){
+            e.vx -= Math.cos(dir) * 0.06;
+            e.vy -= Math.sin(dir) * 0.06;
+          } else if (aggro){
+            e.vx += Math.cos(dir) * 0.06;
+            e.vy += Math.sin(dir) * 0.06;
+          } else {
+            e.vx += rand(-0.03, 0.03);
+            e.vy += rand(-0.03, 0.03);
+          }
+
+          const eSlow = clamp(1.0 - (e.radius - 18) / 220, 0.50, 1.0);
+          const eSpeed = 120 * eSlow;
+
+          const len = Math.hypot(e.vx, e.vy) || 1;
+          const nx = e.vx / len;
+          const ny = e.vy / len;
+
+          e.x += nx * eSpeed * dt;
+          e.y += ny * eSpeed * dt;
+
+          if (e.x < e.radius || e.x > WORLD_SIZE - e.radius) e.vx *= -1;
+          if (e.y < e.radius || e.y > WORLD_SIZE - e.radius) e.vy *= -1;
+
+          e.x = clamp(e.x, e.radius, WORLD_SIZE - e.radius);
+          e.y = clamp(e.y, e.radius, WORLD_SIZE - e.radius);
+        });
+
+        // Colisiones
+        for (let i=enemies.length-1;i>=0;i--){
+          const e = enemies[i];
+          const d = Math.hypot(player.x - e.x, player.y - e.y);
+          if (d < player.radius + e.radius){
+            if (player.radius >= e.radius * 1.1){
+              enemies.splice(i,1);
+              growPlayer(e.radius * 0.6);
+            } else if (e.radius >= player.radius * 1.1){
+              resetGame();
+              return;
+            }
+          }
+        }
+
+        while (enemies.length < ENEMY_COUNT){
+          enemies.push({
+            x: rand(0, WORLD_SIZE),
+            y: rand(0, WORLD_SIZE),
+            radius: rand(20,34),
+            color: `hsl(${Math.floor(rand(0,360))}, 70%, 55%)`,
+            vx: rand(-1,1),
+            vy: rand(-1,1)
+          });
+        }
+
+        updateHUD();
+      }
+
+      function draw(){
+        const w = canvas.clientWidth;
+        const h = canvas.clientHeight;
+        if (!w || !h) return;
+
+        // fondo
+        const grad = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, Math.max(w,h));
+        grad.addColorStop(0, "rgba(5,15,40,1)");
+        grad.addColorStop(1, "rgba(0,0,0,1)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0,0,w,h);
+
+        // cámara
+        const camX = player.x - w/2;
+        const camY = player.y - h/2;
+
+        // rejilla
+        ctx.strokeStyle = "rgba(255,255,255,0.04)";
+        ctx.lineWidth = 1;
+        const grid = 120;
+        const startX = -((camX % grid) + grid);
+        const startY = -((camY % grid) + grid);
+        for (let x = startX; x < w + grid; x += grid){
+          ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+        }
+        for (let y = startY; y < h + grid; y += grid){
+          ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+        }
+
+        // comida
+        for (const f of foods){
+          const sx = f.x - camX;
+          const sy = f.y - camY;
+          if (sx < -20 || sy < -20 || sx > w+20 || sy > h+20) continue;
+          const g = ctx.createRadialGradient(sx-2, sy-3, 0, sx, sy, f.radius+4);
+          g.addColorStop(0, "#fff");
+          g.addColorStop(1, f.color);
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(sx, sy, f.radius+2, 0, Math.PI*2);
+          ctx.fill();
+        }
+
+        // enemigos
+        for (const e of enemies){
+          const sx = e.x - camX;
+          const sy = e.y - camY;
+          if (sx < -60 || sy < -60 || sx > w+60 || sy > h+60) continue;
+          const g = ctx.createRadialGradient(sx - e.radius*0.4, sy - e.radius*0.4, 0, sx, sy, e.radius+6);
+          g.addColorStop(0, "#fff");
+          g.addColorStop(0.32, e.color);
+          g.addColorStop(1, "rgba(0,0,0,0.9)");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(sx, sy, e.radius, 0, Math.PI*2);
+          ctx.fill();
+
+          ctx.strokeStyle = "rgba(0,0,0,0.55)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(sx, sy, e.radius*0.55, 0, Math.PI*2);
+          ctx.stroke();
+        }
+
+        // jugador
+        const px = player.x - camX;
+        const py = player.y - camY;
+        const gp = ctx.createRadialGradient(px - player.radius*0.3, py - player.radius*0.4, 0, px, py, player.radius+8);
+        gp.addColorStop(0, "#fff");
+        gp.addColorStop(0.3, player.color);
+        gp.addColorStop(1, "rgba(0,0,0,0.9)");
+        ctx.fillStyle = gp;
+        ctx.beginPath();
+        ctx.arc(px, py, player.radius, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(px, py, player.radius*0.65, 0, Math.PI*2);
+        ctx.stroke();
+      }
+
+      // ----------------- LOOP -----------------
+      let last = performance.now();
+      let shownOk = false;
+
+      function loop(now){
+        // dt en segundos y clamped (si vuelves de segundo plano)
+        let dt = (now - last) / 1000;
+        last = now;
+        dt = clamp(dt, 0, 0.05); // max 50ms por frame
+
+        try{
+          update(dt);
+          draw();
+
+          if (!shownOk){
+            shownOk = true;
+            hideStatus();
+          }
+        } catch (err){
+          status("ERROR EN LOOP:
+" + (err?.message || String(err)) , true);
+          return; // detiene loop si hay error
+        }
+
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>
