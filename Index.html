@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>Cell Wars - Juego Multijugador</title>
+    <style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow: hidden;
+    background: #0a0a0a;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+#gameContainer {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    overflow: hidden;
+}
+
+#gameCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at center, #1a1a2e 0%, #0a0a0a 100%);
+}
+
+#hud {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    pointer-events: none;
+    z-index: 10;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+#stats {
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(10px);
+    padding: 16px 24px;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#massValue, #rankValue, #levelValue {
+    color: #00d4ff;
+    font-weight: 700;
+    font-size: 20px;
+}
+
+#info {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    padding: 12px 20px;
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 13px;
+    text-align: right;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    line-height: 1.6;
+}
+
+#startScreen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.95) 0%, rgba(10, 10, 30, 0.95) 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+#startScreen.hidden {
+    display: none;
+}
+
+#startScreen h1 {
+    color: #00d4ff;
+    font-size: 64px;
+    margin-bottom: 16px;
+    text-shadow: 0 0 40px rgba(0, 212, 255, 0.6);
+    font-weight: 800;
+}
+
+#startScreen p {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 18px;
+    margin-bottom: 40px;
+    text-align: center;
+    max-width: 400px;
+}
+
+#startButton {
+    background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%);
+    border: none;
+    padding: 20px 60px;
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 8px 30px rgba(0, 212, 255, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+#startButton:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 40px rgba(0, 212, 255, 0.7);
+}
+
+#startButton:active {
+    transform: translateY(0);
+}
+
+#gameOverScreen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.95);
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+#gameOverScreen.show {
+    display: flex;
+}
+
+#gameOverScreen h2 {
+    color: #ff6b6b;
+    font-size: 48px;
+    margin-bottom: 20px;
+}
+
+#finalScore {
+    color: #00d4ff;
+    font-size: 32px;
+    margin-bottom: 30px;
+}
+
+#restartButton {
+    background: linear-gradient(135deg, #00d4ff 0%, #0080ff 100%);
+    border: none;
+    padding: 16px 48px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-top: 20px;
+}
+
+#restartButton:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 212, 255, 0.5);
+}
+
+@media (max-width: 768px) {
+    #startScreen h1 {
+        font-size: 48px;
+    }
+    
+    #startButton {
+        padding: 16px 40px;
+        font-size: 18px;
+    }
+    
+    #stats {
+        font-size: 14px;
+        padding: 12px 16px;
+    }
+    
+    #hud {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    #info {
+        align-self: flex-start;
+    }
+}
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="hud">
+            <div id="stats">
+                <div>Masa: <span id="massValue">10</span></div>
+                <div>Ranking: <span id="rankValue">1</span>/20</div>
+                <div>Nivel: <span id="levelValue">1</span></div>
+            </div>
+            <div id="info">
+                <div>Toca para moverte</div>
+                <div>Come células pequeñas</div>
+            </div>
+        </div>
+        <div id="startScreen">
+            <h1>⚫ CELL WARS</h1>
+            <p>Devora o sé devorado. Domina el mundo celular.</p>
+            <button id="startButton">COMENZAR JUEGO</button>
+        </div>
+        <div id="gameOverScreen">
+            <h2>🎮 GAME OVER</h2>
+            <div id="finalScore">Masa Final: 0</div>
+            <button id="restartButton">JUGAR DE NUEVO</button>
+        </div>
+    </div>
+
+    <script>
+const CONFIG = {
+    WORLD_WIDTH: 2000,
+    WORLD_HEIGHT: 2000,
+    PLAYER_START_MASS: 10,
+    FOOD_COUNT: 300,
+    ENEMY_COUNT: 20,
+    BASE_SPEED: 300,
+    FRICTION: 0.92
+};
+
+class Vector2 {
+    constructor(x = 0, y = 0) {
+        this.x = x;
+        this.y = y;
+    }
+    add(v) { return new Vector2(this.x + v.x, this.y + v.y); }
+    subtract(v) { return new Vector2(this.x - v.x, this.y - v.y); }
+    multiply(n) { return new Vector2(this.x * n, this.y * n); }
+    divide(n) { return new Vector2(this.x / n, this.y / n); }
+    magnitude() { return Math.sqrt(this.x ** 2 + this.y ** 2); }
+    normalize() { const mag = this.magnitude(); return mag > 0 ? this.divide(mag) : new Vector2(0, 0); }
+    distance(v) { return this.subtract(v).magnitude(); }
+}
+
+class Camera {
+    constructor(width, height) {
+        this.pos = new Vector2(0, 0);
+        this.zoom = 1;
+        this.width = width;
+        this.height = height;
+        this.targetZoom = 1;
+    }
+    worldToScreen(worldPos) {
+        const x = (worldPos.x - this.pos.x) * this.zoom + this.width / 2;
+        const y = (worldPos.y - this.pos.y) * this.zoom + this.height / 2;
+        return new Vector2(x, y);
+    }
+    screenToWorld(screenPos) {
+        const x = (screenPos.x - this.width / 2) / this.zoom + this.pos.x;
+        const y = (screenPos.y - this.height / 2) / this.zoom + this.pos.y;
+        return new Vector2(x, y);
+    }
+    follow(target, dt) {
+        const diff = target.subtract(this.pos);
+        this.pos = this.pos.add(diff.multiply(dt * 5));
+        const zoomTarget = Math.max(0.5, Math.min(2, 500 / Math.sqrt(target.mass)));
+        this.targetZoom += (zoomTarget - this.targetZoom) * dt * 3;
+        this.zoom = this.targetZoom;
+    }
+}
+
+class Cell {
+    constructor(x, y, mass, color = '#00d4ff', isPlayer = false) {
+        this.pos = new Vector2(x, y);
+        this.vel = new Vector2(0, 0);
+        this.mass = Math.max(1, mass);
+        this.radius = Math.sqrt(this.mass / Math.PI) * 2;
+        this.color = color;
+        this.isPlayer = isPlayer;
+        this.targetPos = null;
+    }
+    getSpeed() {
+        const baseSpeed = CONFIG.BASE_SPEED;
+        const speedReduction = Math.log10(this.mass) * 30;
+        return Math.max(50, baseSpeed - speedReduction);
+    }
+    update(dt, worldWidth, worldHeight) {
+        if (this.targetPos) {
+            const direction = this.targetPos.subtract(this.pos).normalize();
+            const speed = this.getSpeed();
+            const acc = direction.multiply(speed).multiply(dt);
+            this.vel = this.vel.add(acc);
+        }
+        this.vel = this.vel.multiply(CONFIG.FRICTION);
+        const maxSpeed = this.getSpeed() * 1.5;
+        if (this.vel.magnitude() > maxSpeed) {
+            this.vel = this.vel.normalize().multiply(maxSpeed);
+        }
+        this.pos = this.pos.add(this.vel.multiply(dt));
+        const padding = this.radius;
+        this.pos.x = Math.max(padding, Math.min(worldWidth - padding, this.pos.x));
+        this.pos.y = Math.max(padding, Math.min(worldHeight - padding, this.pos.y));
+    }
+    draw(ctx, camera, isSelected = false) {
+        const screenPos = camera.worldToScreen(this.pos);
+        const screenRadius = this.radius * camera.zoom;
+        if (screenRadius < 1) return;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.beginPath();
+        ctx.arc(screenPos.x + 2, screenPos.y + 2, screenRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, screenRadius, 0, Math.PI * 2);
+        ctx.fill();
+        if (isSelected) {
+            ctx.strokeStyle = 'rgba(0, 212, 255, 0.8)';
+            ctx.lineWidth = 2 * camera.zoom;
+        } else {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.lineWidth = 1 * camera.zoom;
+        }
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, screenRadius, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    collidesWith(other) {
+        const dist = this.pos.distance(other.pos);
+        return dist < this.radius + other.radius;
+    }
+    addMass(amount) {
+        this.mass += amount;
+        this.radius = Math.sqrt(this.mass / Math.PI) * 2;
+    }
+}
+
+class AICell extends Cell {
+    constructor(x, y, mass, color) {
+        super(x, y, mass, color, false);
+        this.behavior = 'roaming';
+        this.roamingTarget = new Vector2(Math.random() * CONFIG.WORLD_WIDTH, Math.random() * CONFIG.WORLD_HEIGHT);
+        this.thinkTimer = 0;
+    }
+    think(player, allCells, foods) {
+        this.thinkTimer += 0.016;
+        if (this.thinkTimer < 0.5) return;
+        this.thinkTimer = 0;
+        const nearestFood = this.findNearest(foods, 300);
+        const predators = allCells.filter(c => c.mass > this.mass * 1.1 && c !== this);
+        const nearestPredator = this.findNearest(predators, 400);
+        const prey = allCells.filter(c => c.mass < this.mass * 0.8 && c !== this);
+        const nearestPrey = this.findNearest(prey, 250);
+        if (nearestPredator) {
+            this.behavior = 'fleeing';
+            this.targetPos = this.pos.add(this.pos.subtract(nearestPredator.pos).normalize().multiply(100));
+        } else if (nearestPrey) {
+            this.behavior = 'hunting';
+            this.targetPos = nearestPrey.pos;
+        } else if (nearestFood) {
+            this.behavior = 'eating';
+            this.targetPos = nearestFood.pos;
+        } else {
+            this.behavior = 'roaming';
+            if (this.pos.distance(this.roamingTarget) < 50) {
+                this.roamingTarget = new Vector2(Math.random() * CONFIG.WORLD_WIDTH, Math.random() * CONFIG.WORLD_HEIGHT);
+            }
+            this.targetPos = this.roamingTarget;
+        }
+    }
+    findNearest(cells, maxDist) {
+        let nearest = null;
+        let minDist = maxDist;
+        for (let cell of cells) {
+            const dist = this.pos.distance(cell.pos);
+            if (dist < minDist) {
+                minDist = dist;
+                nearest = cell;
+            }
+        }
+        return nearest;
+    }
+}
+
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+        this.camera = new Camera(this.canvas.width, this.canvas.height);
+        this.player = null;
+        this.enemies = [];
+        this.food = [];
+        this.gameRunning = false;
+        this.score = 0;
+        this.level = 1;
+        this.mousePos = new Vector2(0, 0);
+        this.setupEventListeners();
+    }
+    setupEventListeners() {
+        document.getElementById('startButton').addEventListener('click', () => this.start());
+        document.getElementById('restartButton').addEventListener('click', () => this.start());
+        this.canvas.addEventListener('mousemove', (e) => {
+            this.mousePos = new Vector2(e.clientX, e.clientY);
+        });
+        this.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches.length > 0) {
+                this.mousePos = new Vector2(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        });
+        window.addEventListener('resize', () => {
+            this.canvas.width = window.innerWidth;
+            this.canvas.height = window.innerHeight;
+        });
+    }
+    start() {
+        this.gameRunning = true;
+        document.getElementById('startScreen').classList.add('hidden');
+        document.getElementById('gameOverScreen').classList.remove('show');
+        this.player = new Cell(CONFIG.WORLD_WIDTH / 2, CONFIG.WORLD_HEIGHT / 2, CONFIG.PLAYER_START_MASS, '#00d4ff', true);
+        this.enemies = [];
+        this.food = [];
+        this.score = 0;
+        this.level = 1;
+        const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a29bfe', '#fd79a8', '#fdcb6e'];
+        for (let i = 0; i < CONFIG.ENEMY_COUNT; i++) {
+            const x = Math.random() * CONFIG.WORLD_WIDTH;
+            const y = Math.random() * CONFIG.WORLD_HEIGHT;
+            const mass = 5 + Math.random() * 15;
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            this.enemies.push(new AICell(x, y, mass, color));
+        }
+        this.spawnFood(CONFIG.FOOD_COUNT);
+        this.gameLoop();
+    }
+    spawnFood(count) {
+        for (let i = 0; i < count; i++) {
+            const x = Math.random() * CONFIG.WORLD_WIDTH;
+            const y = Math.random() * CONFIG.WORLD_HEIGHT;
+            const color = ['#ffeb3b', '#ff9800', '#2196f3', '#9c27b0', '#00bcd4'][Math.floor(Math.random() * 5)];
+            this.food.push(new Cell(x, y, 1, color, false));
+        }
+    }
+    update(dt) {
+        if (!this.gameRunning) return;
+        const mouseWorldPos = this.camera.screenToWorld(this.mousePos);
+        this.player.targetPos = mouseWorldPos;
+        this.player.update(dt, CONFIG.WORLD_WIDTH, CONFIG.WORLD_HEIGHT);
+        this.camera.follow(this.player.pos, dt);
+        for (let enemy of this.enemies) {
+            enemy.think(this.player, this.enemies, this.food);
+            enemy.update(dt, CONFIG.WORLD_WIDTH, CONFIG.WORLD_HEIGHT);
+        }
+        for (let i = this.food.length - 1; i >= 0; i--) {
+            if (this.player.collidesWith(this.food[i])) {
+                const mass = this.food[i].mass;
+                this.player.addMass(mass);
+                this.score += Math.floor(mass * 10);
+                this.food.splice(i, 1);
+            }
+        }
+        for (let enemy of this.enemies) {
+            for (let i = this.food.length - 1; i >= 0; i--) {
+                if (enemy.collidesWith(this.food[i])) {
+                    enemy.addMass(this.food[i].mass);
+                    this.food.splice(i, 1);
+                    break;
+                }
+            }
+        }
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            if (this.player.collidesWith(this.enemies[i]) && this.player.mass > this.enemies[i].mass * 1.1) {
+                const mass = this.enemies[i].mass;
+                this.player.addMass(mass);
+                this.score += Math.floor(mass * 50);
+                this.enemies.splice(i, 1);
+                if (this.enemies.length < CONFIG.ENEMY_COUNT) {
+                    const x = Math.random() * CONFIG.WORLD_WIDTH;
+                    const y = Math.random() * CONFIG.WORLD_HEIGHT;
+                    const mass = 5 + Math.random() * 15;
+                    const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+                    this.enemies.push(new AICell(x, y, mass, color));
+                }
+                continue;
+            }
+            if (this.enemies[i].collidesWith(this.player) && this.enemies[i].mass > this.player.mass * 1.1) {
+                this.gameOver();
+                return;
+            }
+        }
+        if (this.food.length < CONFIG.FOOD_COUNT * 0.5) {
+            this.spawnFood(Math.floor(CONFIG.FOOD_COUNT * 0.2));
+        }
+        this.level = Math.floor(this.score / 1000) + 1;
+    }
+    draw() {
+        this.ctx.fillStyle = '#0a0a0a';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        for (let food of this.food) {
+            food.draw(this.ctx, this.camera);
+        }
+        for (let enemy of this.enemies) {
+            enemy.draw(this.ctx, this.camera);
+        }
+        if (this.player) {
+            this.player.draw(this.ctx, this.camera, true);
+        }
+        if (this.player) {
+            document.getElementById('massValue').textContent = Math.floor(this.player.mass);
+            const rank = this.enemies.filter(e => e.mass > this.player.mass).length + 1;
+            document.getElementById('rankValue').textContent = rank;
+            document.getElementById('levelValue').textContent = this.level;
+        }
+    }
+    gameOver() {
+        this.gameRunning = false;
+        document.getElementById('finalScore').textContent = `Masa Final: ${Math.floor(this.player.mass)} | Puntos: ${this.score}`;
+        document.getElementById('gameOverScreen').classList.add('show');
+    }
+    gameLoop = () => {
+        this.update(0.016);
+        this.draw();
+        requestAnimationFrame(this.gameLoop);
+    }
+}
+
+const game = new Game();
+    </script>
+</body>
+</html>
