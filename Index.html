@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cell Wars: Master Edition</title>
+    <style>
+        :root { --p-color: #00d4ff; }
+        body { margin: 0; background: #050505; color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; touch-action: none; user-select: none; }
+        canvas { display: block; }
+        
+        /* UI de Pantalla de Inicio */
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, rgba(10,20,50,0.95) 0%, rgba(0,0,0,1) 100%); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; transition: 0.5s; }
+        h1 { font-size: 70px; margin: 0; background: linear-gradient(to bottom, #fff, var(--p-color)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 0 30px rgba(0,212,255,0.3); }
+        
+        /* Tienda de Skins */
+        .shop-title { margin-top: 30px; font-size: 18px; text-transform: uppercase; letter-spacing: 2px; color: #aaa; }
+        #skin-picker { display: flex; gap: 15px; margin: 20px 0; }
+        .skin { width: 45px; height: 45px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: 0.3s; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
+        .skin:hover { transform: scale(1.1); }
+        .skin.active { border-color: #fff; transform: scale(1.2); box-shadow: 0 0 20px #fff; }
+
+        /* Botones */
+        .btn { padding: 18px 50px; font-size: 22px; background: var(--p-color); border: none; border-radius: 50px; color: #000; font-weight: 800; cursor: pointer; box-shadow: 0 10px 30px rgba(0,212,255,0.4); transition: 0.3s; }
+        .btn:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(0,212,255,0.6); }
+        
+        /* HUD del Juego */
+        #hud { position: absolute; top: 20px; left: 20px; pointer-events: none; display: none; }
+        .stat-box { background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 15px; border-left: 5px solid var(--p-color); margin-bottom: 10px; backdrop-filter: blur(5px); }
+        #record { color: #ffd700; font-weight: bold; }
+
+        /* Botón de Monetización (Simulado) */
+        #ad-btn { position: absolute; bottom: 30px; background: #2ed573; padding: 10px 20px; border-radius: 10px; font-size: 14px; cursor: pointer; display: none; z-index: 110; border: none; color: #fff; }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1>CELL WARS</h1>
+        <p style="color:rgba(255,255,255,0.5)">Domina el ecosistema neón</p>
+        
+        <div class="shop-title">Tunea tu célula</div>
+        <div id="skin-picker">
+            <div class="skin active" style="background:#00d4ff" onclick="selectSkin('#00d4ff', this)"></div>
+            <div class="skin" style="background:#ff4757" onclick="selectSkin('#ff4757', this)"></div>
+            <div class="skin" style="background:#2ed573" onclick="selectSkin('#2ed573', this)"></div>
+            <div class="skin" style="background:#ffa502" onclick="selectSkin('#ffa502', this)"></div>
+            <div class="skin" style="background:#70a1ff" onclick="selectSkin('#70a1ff', this)"></div>
+            <div class="skin" style="background:#e056fd" onclick="selectSkin('#e056fd', this)"></div>
+        </div>
+
+        <button class="btn" onclick="initGame()">JUGAR AHORA</button>
+        <p style="margin-top:20px">Record: <span id="record-val">0</span></p>
+    </div>
+
+    <div id="hud">
+        <div class="stat-box">MASA: <span id="mass-display" style="color:var(--p-color)">10</span></div>
+        <div class="stat-box">RÉCORD: <span id="record">0</span></div>
+    </div>
+
+    <button id="ad-btn" onclick="watchAd()">📺 +50 MASA (AD)</button>
+
+    <canvas id="game"></canvas>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        let w, h, player, gameRunning = false;
+        let foods = [], enemies = [], particles = [];
+        let playerColor = '#00d4ff';
+        let highScore = localStorage.getItem('cellwars_record') || 0;
+
+        document.getElementById('record-val').innerText = highScore;
+
+        function resize() {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+        }
+        window.onresize = resize;
+        resize();
+
+        function selectSkin(color, el) {
+            playerColor = color;
+            document.querySelectorAll('.skin').forEach(s => s.classList.remove('active'));
+            el.classList.add('active');
+            document.documentElement.style.setProperty('--p-color', color);
+        }
+
+        class Entity {
+            constructor(x, y, m, c, name = "") {
+                this.x = x; this.y = y; this.m = m; this.c = c;
+                this.name = name;
+                this.vx = 0; this.vy = 0;
+            }
+            get r() { return Math.sqrt(this.m / Math.PI) * 5; }
+            draw(camX, camY) {
+                let sx = this.x - camX + w/2;
+                let sy = this.y - camY + h/2;
+                
+                // Brillo Neón
+                ctx.shadowBlur = 15; ctx.shadowColor = this.c;
+                ctx.fillStyle = this.c;
+                ctx.beginPath(); ctx.arc(sx, sy, this.r, 0, Math.PI*2); ctx.fill();
+                ctx.shadowBlur = 0;
+                
+                // Borde y Nombre
+                ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 2; ctx.stroke();
+                if(this.name) {
+                    ctx.fillStyle = "#fff"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
+                    ctx.fillText(this.name, sx, sy + this.r + 15);
+                }
+            }
+        }
+
+        function initGame() {
+            document.getElementById('overlay').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('overlay').style.display = 'none';
+                document.getElementById('hud').style.display = 'block';
+                document.getElementById('ad-btn').style.display = 'block';
+            }, 500);
+
+            player = new Entity(2000, 2000, 15, playerColor);
+            foods = []; enemies = []; particles = [];
+            for(let i=0; i<400; i++) spawnFood();
+            for(let i=0; i<30; i++) spawnEnemy();
+            
+            gameRunning = true;
+            document.getElementById('record').innerText = highScore;
+            animate();
+        }
+
+        function spawnFood() {
+            foods.push({x: Math.random()*4000, y: Math.random()*4000, c: `hsl(${Math.random()*360}, 80%, 60%)`});
+        }
+
+        function spawnEnemy() {
+            const names = ["Killer", "Shadow", "Alpha", "Bot_99", "Zar", "Venom", "Apex"];
+            enemies.push(new Entity(
+                Math.random()*4000, Math.random()*4000, 
+                10 + Math.random()*50, 
+                `hsl(${Math.random()*360}, 70%, 50%)`,
+                names[Math.floor(Math.random()*names.length)]
+            ));
+        }
+
+        let mx = w/2, my = h/2;
+        canvas.onmousemove = e => { mx = e.clientX; my = e.clientY; };
+        canvas.ontouchmove = e => { mx = e.touches[0].clientX; my = e.touches[0].clientY; };
+
+        function watchAd() {
+            alert("Simulando anuncio... ¡+50 de Masa concedidos!");
+            player.m += 50;
+            document.getElementById('ad-btn').style.display = 'none';
+        }
+
+        function animate() {
+            if(!gameRunning) return;
+            ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, w, h);
+
+            // Dibujar Fondo (Grid)
+            ctx.strokeStyle = '#151515'; ctx.lineWidth = 1;
+            for(let i=-(player.x%50); i<w; i+=50) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,h); ctx.stroke(); }
+            for(let i=-(player.y%50); i<h; i+=50) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(w,i); ctx.stroke(); }
+
+            // Movimiento Jugador
+            let dx = mx - w/2, dy = my - h/2, dist = Math.sqrt(dx*dx + dy*dy);
+            if(dist > 5) {
+                let s = Math.max(1.2, 12 / Math.sqrt(player.m));
+                player.x += (dx/dist) * s; player.y += (dy/dist) * s;
+            }
+
+            // Comida
+            foods.forEach((f, i) => {
+                let d = Math.sqrt((f.x-player.x)**2 + (f.y-player.y)**2);
+                if(d < player.r) { player.m += 0.6; foods.splice(i, 1); spawnFood(); }
+                let sx = f.x - player.x + w/2, sy = f.y - player.y + h/2;
+                ctx.fillStyle = f.c; ctx.beginPath(); ctx.arc(sx, sy, 3, 0, 7); ctx.fill();
+            });
+
+            // Enemigos
+            enemies.forEach((e, i) => {
+                let edx = player.x - e.x, edy = player.y - e.y, edist = Math.sqrt(edx*edx + edy*edy);
+                let es = Math.max(0.8, 10 / Math.sqrt(e.m));
+                
+                if(edist < 800) {
+                    if(e.m > player.m * 1.1) { e.x += (edx/edist)*es; e.y += (edy/edist)*es; }
+                    else { e.x -= (edx/edist)*es; e.y -= (edy/edist)*es; }
+                }
+
+                if(edist < player.r + e.r) {
+                    if(player.m > e.m * 1.1) { player.m += e.m/2; enemies.splice(i, 1); spawnEnemy(); }
+                    else if(e.m > player.m * 1.1) { 
+                        gameRunning = false; 
+                        if(player.m > highScore) localStorage.setItem('cellwars_record', Math.floor(player.m));
+                        alert("¡GAME OVER! Masa final: " + Math.floor(player.m)); 
+                        location.reload(); 
+                    }
+                }
+                e.draw(player.x, player.y);
+            });
+
+            player.draw(player.x, player.y);
+            document.getElementById('mass-display').innerText = Math.floor(player.m);
+            requestAnimationFrame(animate);
+        }
+    </script>
+</body>
+</html>
